@@ -1,0 +1,32 @@
+
+2026-11-15 23:22:43.660 | === Scenario 1: out-of-order delivery + duplicate (v2, v1, v2 again) ===
+2026-11-15 23:22:43.911 | deliver v2 PAID
+2026-11-15 23:22:43.935 |   [order-1001] v2 PAID: BUFFERED - waiting for missing version(s) [1]; order stays at v0 (none)
+2026-11-15 23:22:44.185 | deliver v1 CREATED
+2026-11-15 23:22:44.185 |   [order-1001] v1 CREATED: APPLIED - v0 (none) -> v1 CREATED
+2026-11-15 23:22:44.185 |   [order-1001] v2 PAID: APPLIED (released from pending buffer) - v1 CREATED -> v2 PAID
+2026-11-15 23:22:44.436 | deliver v2 PAID
+2026-11-15 23:22:44.436 |   [order-1001] v2 PAID: DUPLICATE - already applied (current v2), ignored
+2026-11-15 23:22:44.436 |   => final state of order-1001: v2 PAID | history: CREATED -> PAID | pending: none | missing: none
+
+2026-11-15 23:22:44.436 | === Scenario 2: missing event (only v3 arrives; v1 and v2 never do) ===
+2026-11-15 23:22:44.687 | deliver v3 SHIPPED
+2026-11-15 23:22:44.688 |   [order-2002] v3 SHIPPED: BUFFERED - waiting for missing version(s) [1, 2]; order stays at v0 (none)
+2026-11-15 23:22:44.688 |   => final state of order-2002: v0 (none) | history: (empty) | pending: {3: 'SHIPPED'} | missing: [1, 2]
+2026-11-15 23:22:44.938 | deliver v1 CREATED (v2 is still missing)
+2026-11-15 23:22:44.939 |   [order-2002] v1 CREATED: APPLIED - v0 (none) -> v1 CREATED
+2026-11-15 23:22:44.939 |   => final state of order-2002: v1 CREATED | history: CREATED | pending: {3: 'SHIPPED'} | missing: [2]
+
+2026-11-15 23:22:44.939 | === Scenario 3: stale worker rejected by fencing token ===
+2026-11-15 23:22:44.939 |   lock service: worker-A acquires the lease, fencing token = 1
+2026-11-15 23:22:44.939 |   [order-3003] worker-A (token 1) writes v1 CREATED: token accepted
+2026-11-15 23:22:44.939 |   [order-3003] v1 CREATED: APPLIED - v0 (none) -> v1 CREATED
+2026-11-15 23:22:45.190 |   worker-A stalls (e.g. long GC pause); its lease expires
+2026-11-15 23:22:45.441 |   lock service: worker-B acquires the lease, fencing token = 2
+2026-11-15 23:22:45.441 |   [order-3003] worker-B (token 2) writes v2 PAID: token accepted
+2026-11-15 23:22:45.441 |   [order-3003] v2 PAID: APPLIED - v1 CREATED -> v2 PAID
+2026-11-15 23:22:45.693 |   worker-A wakes up, still believes it holds the lease
+2026-11-15 23:22:45.693 |   [order-3003] worker-A (token 1) writes v3 SHIPPED: REJECTED - stale token, store has already seen token 2
+2026-11-15 23:22:45.943 |   [order-3003] worker-B (token 2) writes v3 SHIPPED: token accepted
+2026-11-15 23:22:45.943 |   [order-3003] v3 SHIPPED: APPLIED - v2 PAID -> v3 SHIPPED
+2026-11-15 23:22:45.944 |   => final state of order-3003: v3 SHIPPED | history: CREATED -> PAID -> SHIPPED | pending: none | missing: none

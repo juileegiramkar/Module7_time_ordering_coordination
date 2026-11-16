@@ -10,11 +10,39 @@ Demonstrates three things a distributed system has to get right:
    token older than one the store has already seen is rejected.
 
 Run:  python order_sim.py
+
+Every line is printed with a wall-clock timestamp and also written to
+logs/run.log.
 """
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+
+LOG_PATH = Path(__file__).parent / "logs" / "run.log"
+STEP_DELAY = 0.25  # seconds between deliveries, standing in for network delay
+
+_log_file = None
+
+
+def emit(msg: str = "") -> None:
+    """Print a timestamped log line, and append it to the log file if open."""
+    if msg.startswith("\n"):
+        emit()
+        msg = msg[1:]
+    line = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} | {msg}" if msg else ""
+    print(line)
+    if _log_file is not None:
+        _log_file.write(line + "\n")
+
+
+def step(msg: str) -> None:
+    """A new delivery or worker action: let some simulated time pass first."""
+    time.sleep(STEP_DELAY)
+    emit(msg)
 
 APPLIED = "APPLIED"
 BUFFERED = "BUFFERED"
@@ -45,7 +73,7 @@ class OrderStore:
     arrival time. Writers are fenced by a monotonically increasing token.
     """
 
-    def __init__(self, log=print):
+    def __init__(self, log=emit):
         self._orders: dict[str, OrderState] = {}
         self._log = log
 
@@ -124,7 +152,7 @@ class LockService:
     def __init__(self):
         self._next_token = 0
 
-    def acquire(self, worker: str, log=print) -> int:
+    def acquire(self, worker: str, log=emit) -> int:
         self._next_token += 1
         log(f"  lock service: {worker} acquires the lease, fencing token = {self._next_token}")
         return self._next_token
@@ -133,7 +161,7 @@ class LockService:
 def show(store: OrderStore, order_id: str) -> None:
     st = store.state(order_id)
     pending = {v: e.status for v, e in sorted(st.pending.items())}
-    print(
+    emit(
         f"  => final state of {order_id}: v{st.version} {st.status} | "
         f"history: {' -> '.join(st.history) or '(empty)'} | "
         f"pending: {pending or 'none'} | missing: {store.missing_versions(order_id) or 'none'}"
@@ -141,7 +169,7 @@ def show(store: OrderStore, order_id: str) -> None:
 
 
 def scenario_ordering() -> OrderStore:
-    print("\n=== Scenario 1: out-of-order delivery + duplicate (v2, v1, v2 again) ===")
+    emit("\n=== Scenario 1: out-of-order delivery + duplicate (v2, v1, v2 again) ===")
     store = OrderStore()
     oid = "order-1001"
     for ev in (
@@ -149,49 +177,54 @@ def scenario_ordering() -> OrderStore:
         OrderEvent(oid, 1, "CREATED"),
         OrderEvent(oid, 2, "PAID"),
     ):
-        print(f"deliver v{ev.version} {ev.status}")
+        step(f"deliver v{ev.version} {ev.status}")
         store.receive(ev)
     show(store, oid)
     return store
 
 
 def scenario_missing() -> OrderStore:
-    print("\n=== Scenario 2: missing event (only v3 arrives; v1 and v2 never do) ===")
+    emit("\n=== Scenario 2: missing event (only v3 arrives; v1 and v2 never do) ===")
     store = OrderStore()
     oid = "order-2002"
     ev = OrderEvent(oid, 3, "SHIPPED")
-    print(f"deliver v{ev.version} {ev.status}")
+    step(f"deliver v{ev.version} {ev.status}")
     store.receive(ev)
     show(store, oid)
 
-    print("deliver v1 CREATED (v2 is still missing)")
+    step("deliver v1 CREATED (v2 is still missing)")
     store.receive(OrderEvent(oid, 1, "CREATED"))
     show(store, oid)
     return store
 
 
 def scenario_stale_worker() -> OrderStore:
-    print("\n=== Scenario 3: stale worker rejected by fencing token ===")
+    emit("\n=== Scenario 3: stale worker rejected by fencing token ===")
     store = OrderStore()
     locks = LockService()
     oid = "order-3003"
 
     token_a = locks.acquire("worker-A")
     store.write("worker-A", token_a, OrderEvent(oid, 1, "CREATED"))
-    print("  worker-A stalls (e.g. long GC pause); its lease expires")
+    step("  worker-A stalls (e.g. long GC pause); its lease expires")
 
+    time.sleep(STEP_DELAY)
     token_b = locks.acquire("worker-B")
     store.write("worker-B", token_b, OrderEvent(oid, 2, "PAID"))
 
-    print("  worker-A wakes up, still believes it holds the lease")
+    step("  worker-A wakes up, still believes it holds the lease")
     store.write("worker-A", token_a, OrderEvent(oid, 3, "SHIPPED"))
 
+    time.sleep(STEP_DELAY)
     store.write("worker-B", token_b, OrderEvent(oid, 3, "SHIPPED"))
     show(store, oid)
     return store
 
 
 if __name__ == "__main__":
-    scenario_ordering()
-    scenario_missing()
-    scenario_stale_worker()
+    LOG_PATH.parent.mkdir(exist_ok=True)
+    with open(LOG_PATH, "w", encoding="utf-8") as _log_file:
+        scenario_ordering()
+        scenario_missing()
+        scenario_stale_worker()
+    print(f"\nLog written to {LOG_PATH.relative_to(Path(__file__).parent)}")
