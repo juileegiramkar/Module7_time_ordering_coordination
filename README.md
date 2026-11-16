@@ -27,7 +27,7 @@ Every line the simulation prints carries a wall-clock timestamp, and the same li
 | `order_sim.py` | The `OrderStore`, `LockService`, and the three demo scenarios |
 | `test_order_sim.py` | Unit tests asserting the same behaviour |
 | `logs/run.log` | Timestamped log of the run shown below |
-| `screenshots/` | Images of the terminal output shown below |
+| `screenshots/` | Screenshots of my terminal for the run shown below |
 
 ## How it works
 
@@ -48,34 +48,36 @@ The timestamps in the log are for evidence only. No ordering decision in the cod
 
 ## Evidence
 
-All logs below are the actual output of one run of `python order_sim.py`, also saved in [`logs/run.log`](logs/run.log).
+Screenshot of my terminal running `python order_sim.py` (all three scenarios):
+
+![Terminal screenshot of the simulation run](screenshots/terminal_simulation.png)
+
+The sections below quote the logs from that same run, which are also saved in [`logs/run.log`](logs/run.log).
 
 ### 1. Correct event ordering (delivery order: v2, v1, v2 again)
 
-![Scenario 1 terminal output](screenshots/scenario1_ordering_duplicate.png)
-
 ```
-2026-11-15 23:22:43.660 | === Scenario 1: out-of-order delivery + duplicate (v2, v1, v2 again) ===
-2026-11-15 23:22:43.911 | deliver v2 PAID
-2026-11-15 23:22:43.935 |   [order-1001] v2 PAID: BUFFERED - waiting for missing version(s) [1]; order stays at v0 (none)
-2026-11-15 23:22:44.185 | deliver v1 CREATED
-2026-11-15 23:22:44.185 |   [order-1001] v1 CREATED: APPLIED - v0 (none) -> v1 CREATED
-2026-11-15 23:22:44.185 |   [order-1001] v2 PAID: APPLIED (released from pending buffer) - v1 CREATED -> v2 PAID
-2026-11-15 23:22:44.436 | deliver v2 PAID
-2026-11-15 23:22:44.436 |   [order-1001] v2 PAID: DUPLICATE - already applied (current v2), ignored
-2026-11-15 23:22:44.436 |   => final state of order-1001: v2 PAID | history: CREATED -> PAID | pending: none | missing: none
+2026-11-15 23:30:34.766 | === Scenario 1: out-of-order delivery + duplicate (v2, v1, v2 again) ===
+2026-11-15 23:30:35.016 | deliver v2 PAID
+2026-11-15 23:30:35.017 |   [order-1001] v2 PAID: BUFFERED - waiting for missing version(s) [1]; order stays at v0 (none)
+2026-11-15 23:30:35.268 | deliver v1 CREATED
+2026-11-15 23:30:35.268 |   [order-1001] v1 CREATED: APPLIED - v0 (none) -> v1 CREATED
+2026-11-15 23:30:35.268 |   [order-1001] v2 PAID: APPLIED (released from pending buffer) - v1 CREATED -> v2 PAID
+2026-11-15 23:30:35.519 | deliver v2 PAID
+2026-11-15 23:30:35.519 |   [order-1001] v2 PAID: DUPLICATE - already applied (current v2), ignored
+2026-11-15 23:30:35.520 |   => final state of order-1001: v2 PAID | history: CREATED -> PAID | pending: none | missing: none
 ```
 
-- **Waits for the missing version:** v2 arrives first (23:22:43.911) and is buffered; the order stays at v0.
-- **Applies in the correct order:** v1 arrives about 270 ms later and is applied, then v2 is released from the buffer. History is `CREATED -> PAID`, even though PAID has the earlier arrival timestamp.
+- **Waits for the missing version:** v2 arrives first (23:30:35.016) and is buffered; the order stays at v0.
+- **Applies in the correct order:** v1 arrives about 250 ms later and is applied, then v2 is released from the buffer. History is `CREATED -> PAID`, even though PAID has the earlier arrival timestamp.
 
 ### 2. Duplicate handling
 
 The third delivery in the scenario above is the duplicate:
 
 ```
-2026-11-15 23:22:44.436 | deliver v2 PAID
-2026-11-15 23:22:44.436 |   [order-1001] v2 PAID: DUPLICATE - already applied (current v2), ignored
+2026-11-15 23:30:35.519 | deliver v2 PAID
+2026-11-15 23:30:35.519 |   [order-1001] v2 PAID: DUPLICATE - already applied (current v2), ignored
 ```
 
 The history still contains `PAID` exactly once. A duplicate of an event that is still sitting in the pending buffer is also ignored (covered by `test_duplicate_of_buffered_event_is_ignored`).
@@ -84,16 +86,14 @@ The history still contains `PAID` exactly once. A duplicate of an event that is 
 
 Only v3 is sent; v1 and v2 are missing.
 
-![Scenario 2 terminal output](screenshots/scenario2_missing_event.png)
-
 ```
-2026-11-15 23:22:44.436 | === Scenario 2: missing event (only v3 arrives; v1 and v2 never do) ===
-2026-11-15 23:22:44.687 | deliver v3 SHIPPED
-2026-11-15 23:22:44.688 |   [order-2002] v3 SHIPPED: BUFFERED - waiting for missing version(s) [1, 2]; order stays at v0 (none)
-2026-11-15 23:22:44.688 |   => final state of order-2002: v0 (none) | history: (empty) | pending: {3: 'SHIPPED'} | missing: [1, 2]
-2026-11-15 23:22:44.938 | deliver v1 CREATED (v2 is still missing)
-2026-11-15 23:22:44.939 |   [order-2002] v1 CREATED: APPLIED - v0 (none) -> v1 CREATED
-2026-11-15 23:22:44.939 |   => final state of order-2002: v1 CREATED | history: CREATED | pending: {3: 'SHIPPED'} | missing: [2]
+2026-11-15 23:30:35.520 | === Scenario 2: missing event (only v3 arrives; v1 and v2 never do) ===
+2026-11-15 23:30:35.770 | deliver v3 SHIPPED
+2026-11-15 23:30:35.771 |   [order-2002] v3 SHIPPED: BUFFERED - waiting for missing version(s) [1, 2]; order stays at v0 (none)
+2026-11-15 23:30:35.771 |   => final state of order-2002: v0 (none) | history: (empty) | pending: {3: 'SHIPPED'} | missing: [1, 2]
+2026-11-15 23:30:36.023 | deliver v1 CREATED (v2 is still missing)
+2026-11-15 23:30:36.023 |   [order-2002] v1 CREATED: APPLIED - v0 (none) -> v1 CREATED
+2026-11-15 23:30:36.023 |   => final state of order-2002: v1 CREATED | history: CREATED | pending: {3: 'SHIPPED'} | missing: [2]
 ```
 
 - **The order does not jump ahead:** it stays at v0 rather than becoming SHIPPED, and after v1 arrives it stops at CREATED because v2 is still absent.
@@ -103,32 +103,30 @@ Only v3 is sent; v1 and v2 are missing.
 
 Worker A takes the lease (token 1), stalls, and its lease expires. Worker B takes over (token 2). Worker A then wakes up and tries to write with its old token.
 
-![Scenario 3 terminal output](screenshots/scenario3_stale_worker.png)
-
 ```
-2026-11-15 23:22:44.939 | === Scenario 3: stale worker rejected by fencing token ===
-2026-11-15 23:22:44.939 |   lock service: worker-A acquires the lease, fencing token = 1
-2026-11-15 23:22:44.939 |   [order-3003] worker-A (token 1) writes v1 CREATED: token accepted
-2026-11-15 23:22:44.939 |   [order-3003] v1 CREATED: APPLIED - v0 (none) -> v1 CREATED
-2026-11-15 23:22:45.190 |   worker-A stalls (e.g. long GC pause); its lease expires
-2026-11-15 23:22:45.441 |   lock service: worker-B acquires the lease, fencing token = 2
-2026-11-15 23:22:45.441 |   [order-3003] worker-B (token 2) writes v2 PAID: token accepted
-2026-11-15 23:22:45.441 |   [order-3003] v2 PAID: APPLIED - v1 CREATED -> v2 PAID
-2026-11-15 23:22:45.693 |   worker-A wakes up, still believes it holds the lease
-2026-11-15 23:22:45.693 |   [order-3003] worker-A (token 1) writes v3 SHIPPED: REJECTED - stale token, store has already seen token 2
-2026-11-15 23:22:45.943 |   [order-3003] worker-B (token 2) writes v3 SHIPPED: token accepted
-2026-11-15 23:22:45.943 |   [order-3003] v3 SHIPPED: APPLIED - v2 PAID -> v3 SHIPPED
-2026-11-15 23:22:45.944 |   => final state of order-3003: v3 SHIPPED | history: CREATED -> PAID -> SHIPPED | pending: none | missing: none
+2026-11-15 23:30:36.024 | === Scenario 3: stale worker rejected by fencing token ===
+2026-11-15 23:30:36.025 |   lock service: worker-A acquires the lease, fencing token = 1
+2026-11-15 23:30:36.025 |   [order-3003] worker-A (token 1) writes v1 CREATED: token accepted
+2026-11-15 23:30:36.025 |   [order-3003] v1 CREATED: APPLIED - v0 (none) -> v1 CREATED
+2026-11-15 23:30:36.276 |   worker-A stalls (e.g. long GC pause); its lease expires
+2026-11-15 23:30:36.526 |   lock service: worker-B acquires the lease, fencing token = 2
+2026-11-15 23:30:36.526 |   [order-3003] worker-B (token 2) writes v2 PAID: token accepted
+2026-11-15 23:30:36.526 |   [order-3003] v2 PAID: APPLIED - v1 CREATED -> v2 PAID
+2026-11-15 23:30:36.777 |   worker-A wakes up, still believes it holds the lease
+2026-11-15 23:30:36.777 |   [order-3003] worker-A (token 1) writes v3 SHIPPED: REJECTED - stale token, store has already seen token 2
+2026-11-15 23:30:37.028 |   [order-3003] worker-B (token 2) writes v3 SHIPPED: token accepted
+2026-11-15 23:30:37.028 |   [order-3003] v3 SHIPPED: APPLIED - v2 PAID -> v3 SHIPPED
+2026-11-15 23:30:37.028 |   => final state of order-3003: v3 SHIPPED | history: CREATED -> PAID -> SHIPPED | pending: none | missing: none
 ```
 
 - **The newer token can update:** worker B (token 2) writes PAID and SHIPPED successfully.
-- **The older token is rejected:** worker A's write at 23:22:45.693 is refused even though v3 was the next valid version, because the store had already seen token 2. The check happens at the store, so it does not depend on worker A realising its lease expired.
+- **The older token is rejected:** worker A's write at 23:30:36.777 is refused even though v3 was the next valid version, because the store had already seen token 2. The check happens at the store, so it does not depend on worker A realising its lease expired.
 
 ### 5. Unit tests
 
 Output of `python -m unittest -v`:
 
-![Unit test output](screenshots/unit_tests.png)
+![Terminal screenshot of the unit tests passing](screenshots/terminal_tests.png)
 
 ```
 test_stale_worker_is_rejected (test_order_sim.FencingTokenTest.test_stale_worker_is_rejected) ... ok
